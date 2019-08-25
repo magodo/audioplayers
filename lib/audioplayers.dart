@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
 typedef StreamController CreateStreamController();
+typedef void FocusChangeHandler(bool focused);
 typedef void TimeChangeHandler(Duration duration);
 typedef void ErrorHandler(String message);
 typedef void AudioPlayerStateChangeHandler(AudioPlayerState state);
@@ -84,6 +85,9 @@ class AudioPlayer {
   final StreamController<void> _completionController =
       StreamController<void>.broadcast();
 
+  final StreamController<bool> _focusController =
+  StreamController<bool>.broadcast();
+
   final StreamController<String> _errorController =
       StreamController<String>.broadcast();
 
@@ -132,6 +136,11 @@ class AudioPlayer {
   ///
   /// [ReleaseMode.LOOP] also sends events to this stream.
   Stream<void> get onPlayerCompletion => _completionController.stream;
+  
+  /// Stream of changes on audio focus.
+  ///
+  /// An event is going to be sent as soon as the audio focus is changed
+  Stream<bool> get onFocusChanged => _focusController.stream;
 
   /// Stream of player errors.
   ///
@@ -172,6 +181,13 @@ class AudioPlayer {
   /// This is deprecated. Use [onPlayerCompletion] instead.
   @deprecated
   VoidCallback completionHandler;
+  
+  /// Handler of changes on audio focus.
+  ///
+  /// An event is going to be sent as soon as the audio focus is changed
+  /// This is deprecated. Use [onFocusChanged] instead.
+  @deprecated
+  FocusChangeHandler focusHandler;
 
   /// Handler of player errors.
   ///
@@ -385,6 +401,11 @@ class AudioPlayer {
         // ignore: deprecated_member_use_from_same_package
         player.completionHandler?.call();
         break;
+      case 'audio.onFocusChange':
+        player.state = value? AudioPlayerState.PLAYING : AudioPlayerState.STOPPED;
+        player._focusController.add(value);
+        player.focusHandler?.call(value);
+        break;
       case 'audio.onError':
         player.state = AudioPlayerState.STOPPED;
         player._errorController.add(value);
@@ -415,6 +436,7 @@ class AudioPlayer {
     if (!_durationController.isClosed) futures.add(_durationController.close());
     if (!_completionController.isClosed)
       futures.add(_completionController.close());
+    if (!_focusController.isClosed) futures.add(_focusController.close());
     if (!_errorController.isClosed) futures.add(_errorController.close());
 
     await Future.wait(futures);
