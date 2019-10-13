@@ -70,7 +70,10 @@ public class AudioplayersPlugin implements MethodCallHandler {
                 final boolean respectAudioFocus = call.argument("respectAudioFocus");
                 if(respectAudioFocus){
                     AudioManager manager = initAudioManger();
-                    audioManagers.put(player.getPlayerId(),manager); 
+                    audioManagers.put(player.getPlayerId(),manager);
+                    if (!respectAudioFocuses.containsKey(playerId)) {
+                        respectAudioFocuses.put(playerId, false);
+                    }
                 }
                 player.setUrl(url, isLocal);
                 player.configAttributes(respectSilence, stayAwake, activity.getApplicationContext(), respectAudioFocus);
@@ -208,6 +211,7 @@ public class AudioplayersPlugin implements MethodCallHandler {
                         
             mFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                 .setAudioAttributes(mPlaybackAttributes)
+                .setWillPauseWhenDucked(true)
                 .setAcceptsDelayedFocusGain(true)
                 .setOnAudioFocusChangeListener(audioFocusChangeListener)
                 .build();
