@@ -1,10 +1,12 @@
 package xyz.luan.audioplayers;
 
+import android.content.BroadcastReceiver;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.os.Handler;
-import android.os.Build;
 import android.app.Activity;
 import android.content.Context;
 
@@ -32,16 +34,21 @@ public class AudioplayersPlugin implements MethodCallHandler {
     private final Map<String, AudioManager> audioManagers = new HashMap<>();
     private AudioAttributes mPlaybackAttributes;
     private AudioFocusRequest mFocusRequest;
+    private IntentFilter intentFilter = new IntentFilter();
+    private HeadsetPlugEventReceiver myNoisyAudioStreamReceiver;
 
     public static void registerWith(final Registrar registrar) {
         final MethodChannel channel = new MethodChannel(registrar.messenger(), "xyz.luan/audioplayers");
-        channel.setMethodCallHandler(new AudioplayersPlugin(channel, registrar.activity()));
+        final AudioplayersPlugin audioplayersPlugin = new AudioplayersPlugin(channel, registrar.activity());
+        audioplayersPlugin.myNoisyAudioStreamReceiver =  new HeadsetPlugEventReceiver(audioplayersPlugin.mediaPlayers, channel);
+        channel.setMethodCallHandler(audioplayersPlugin);
     }
 
     private AudioplayersPlugin(final MethodChannel channel, Activity activity) {
         this.channel = channel;
         this.channel.setMethodCallHandler(this);
         this.activity = activity;
+        this.intentFilter.addAction(AudioManager.ACTION_HEADSET_PLUG);
     }
 
     @Override
@@ -81,6 +88,7 @@ public class AudioplayersPlugin implements MethodCallHandler {
                 if (position != null && !mode.equals("PlayerMode.LOW_LATENCY")) {
                     player.seek(position);
                 }
+                activity.registerReceiver(myNoisyAudioStreamReceiver, intentFilter);
                 player.play();
                 break;
             }
@@ -110,7 +118,8 @@ public class AudioplayersPlugin implements MethodCallHandler {
                         audioManagers.get(player.getPlayerId()).abandonAudioFocus(audioFocusChangeListener);
                     }
                     audioManagers.remove(player.getPlayerId());
-                }  
+                }
+                activity.unregisterReceiver(myNoisyAudioStreamReceiver);
                 player.stop();
                 break;
             }
@@ -208,7 +217,7 @@ public class AudioplayersPlugin implements MethodCallHandler {
                 .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                 .build();
-                        
+
             mFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
                 .setAudioAttributes(mPlaybackAttributes)
                 .setWillPauseWhenDucked(true)
@@ -220,7 +229,7 @@ public class AudioplayersPlugin implements MethodCallHandler {
         }else{
             manager.requestAudioFocus(audioFocusChangeListener,
             AudioManager.STREAM_MUSIC,
-            AudioManager.AUDIOFOCUS_GAIN); 
+            AudioManager.AUDIOFOCUS_GAIN);
         }
         return manager;
     }
@@ -237,7 +246,7 @@ public class AudioplayersPlugin implements MethodCallHandler {
                                     channel.invokeMethod("audio.onFocusChange", buildArguments(player.getPlayerId(), true));
                                     respectAudioFocuses.replace(player.getPlayerId(),false);
                                 }
-                            } 
+                            }
                         }
                     }
                     break;
@@ -270,6 +279,45 @@ public class AudioplayersPlugin implements MethodCallHandler {
             }
         }
     };
+
+    private static final class HeadsetPlugEventReceiver extends BroadcastReceiver {
+
+        private final WeakReference<Map<String, Player>> mediaPlayers;
+        private final WeakReference<MethodChannel> channel;
+
+        private HeadsetPlugEventReceiver(final Map<String, Player> mediaPlayers,
+                                         final MethodChannel channel) {
+            this.mediaPlayers = new WeakReference<>(mediaPlayers);
+            this.channel = new WeakReference<>(channel);
+        }
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final MethodChannel channel = this.channel.get();
+            if (AudioManager.ACTION_HEADSET_PLUG.equals(intent.getAction())) {
+                // ACTION_HEADSET_PLUG int extra data meaning:
+                // 0 - unpluged;
+                // 1 - plugged with mic;
+                // 2 - plugged without mic
+                final boolean isPlug = intent.getIntExtra("state", 0) != 0;
+                final Map<String, Player> mediaPlayers = this.mediaPlayers.get();
+                for (Player player : mediaPlayers.values()) {
+                    if (isPlug) {
+                        if (!player.isActuallyPlaying()) {
+                            player.play();
+                        }
+                    } else {
+                        if (player.isActuallyPlaying()) {
+                            player.pause();
+                        }
+                    }
+                    final String key = player.getPlayerId();
+                    channel.invokeMethod("audio.onHeadsetPlug",  buildArguments(key, isPlug));
+                }
+            }
+        }
+    }
+
     private static final class UpdateCallback implements Runnable {
 
         private final WeakReference<Map<String, Player>> mediaPlayers;
