@@ -414,8 +414,11 @@ class AudioPlayer {
         player.errorHandler?.call(value);
         break;
       case 'audio.onHeadsetPlug':
-        player.state =
-            value ? AudioPlayerState.PLAYING : AudioPlayerState.PAUSED;
+        if (player.state == AudioPlayerState.PLAYING && !value) {
+          player.state = AudioPlayerState.PAUSED;
+        } else if (player.state == AudioPlayerState.PAUSED && value) {
+          player.state = AudioPlayerState.PLAYING;
+        }
         break;
       default:
         _log('Unknown method ${call.method} ');
