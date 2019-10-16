@@ -35,12 +35,10 @@ public class AudioplayersPlugin implements MethodCallHandler {
     private AudioAttributes mPlaybackAttributes;
     private AudioFocusRequest mFocusRequest;
     private IntentFilter intentFilter = new IntentFilter();
-    private HeadsetPlugEventReceiver myNoisyAudioStreamReceiver;
 
     public static void registerWith(final Registrar registrar) {
         final MethodChannel channel = new MethodChannel(registrar.messenger(), "xyz.luan/audioplayers");
         final AudioplayersPlugin audioplayersPlugin = new AudioplayersPlugin(channel, registrar.activity());
-        audioplayersPlugin.myNoisyAudioStreamReceiver =  new HeadsetPlugEventReceiver(audioplayersPlugin.mediaPlayers, channel);
         channel.setMethodCallHandler(audioplayersPlugin);
     }
 
@@ -49,6 +47,7 @@ public class AudioplayersPlugin implements MethodCallHandler {
         this.channel.setMethodCallHandler(this);
         this.activity = activity;
         this.intentFilter.addAction(AudioManager.ACTION_HEADSET_PLUG);
+        activity.registerReceiver(new HeadsetPlugEventReceiver(mediaPlayers, channel), intentFilter);
     }
 
     @Override
@@ -88,7 +87,6 @@ public class AudioplayersPlugin implements MethodCallHandler {
                 if (position != null && !mode.equals("PlayerMode.LOW_LATENCY")) {
                     player.seek(position);
                 }
-                activity.registerReceiver(myNoisyAudioStreamReceiver, intentFilter);
                 player.play();
                 break;
             }
@@ -119,7 +117,6 @@ public class AudioplayersPlugin implements MethodCallHandler {
                     }
                     audioManagers.remove(player.getPlayerId());
                 }
-                activity.unregisterReceiver(myNoisyAudioStreamReceiver);
                 player.stop();
                 break;
             }
@@ -296,9 +293,9 @@ public class AudioplayersPlugin implements MethodCallHandler {
             final MethodChannel channel = this.channel.get();
             if (AudioManager.ACTION_HEADSET_PLUG.equals(intent.getAction())) {
                 // ACTION_HEADSET_PLUG int extra data meaning:
-                // 0 - unpluged;
-                // 1 - plugged with mic;
-                // 2 - plugged without mic
+                // - 0: unpluged
+                // - 1: plugged with mic
+                // - 2: plugged without mic
                 final boolean isPlug = intent.getIntExtra("state", 0) != 0;
                 final Map<String, Player> mediaPlayers = this.mediaPlayers.get();
                 for (Player player : mediaPlayers.values()) {
