@@ -413,12 +413,8 @@ class AudioPlayer {
         // ignore: deprecated_member_use_from_same_package
         player.errorHandler?.call(value);
         break;
-      case 'audio.onHeadsetPlug':
-        if (player.state == AudioPlayerState.PLAYING && !value) {
-          player.state = AudioPlayerState.PAUSED;
-        } else if (player.state == AudioPlayerState.PAUSED && value) {
-          player.state = AudioPlayerState.PLAYING;
-        }
+      case 'audio.onAudioBecomeNoisy':
+        player.state = AudioPlayerState.PAUSED;
         break;
       default:
         _log('Unknown method ${call.method} ');

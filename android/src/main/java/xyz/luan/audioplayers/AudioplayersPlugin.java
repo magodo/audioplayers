@@ -46,7 +46,7 @@ public class AudioplayersPlugin implements MethodCallHandler {
         this.channel = channel;
         this.channel.setMethodCallHandler(this);
         this.activity = activity;
-        this.intentFilter.addAction(AudioManager.ACTION_HEADSET_PLUG);
+        this.intentFilter.addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
         activity.registerReceiver(new HeadsetPlugEventReceiver(mediaPlayers, channel), intentFilter);
     }
 
@@ -291,25 +291,14 @@ public class AudioplayersPlugin implements MethodCallHandler {
         @Override
         public void onReceive(Context context, Intent intent) {
             final MethodChannel channel = this.channel.get();
-            if (AudioManager.ACTION_HEADSET_PLUG.equals(intent.getAction())) {
-                // ACTION_HEADSET_PLUG int extra data meaning:
-                // - 0: unpluged
-                // - 1: plugged with mic
-                // - 2: plugged without mic
-                final boolean isPlug = intent.getIntExtra("state", 0) != 0;
+            if (AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(intent.getAction())) {
                 final Map<String, Player> mediaPlayers = this.mediaPlayers.get();
                 for (Player player : mediaPlayers.values()) {
-                    if (isPlug) {
-                        if (!player.isActuallyPlaying()) {
-                            player.play();
-                        }
-                    } else {
-                        if (player.isActuallyPlaying()) {
-                            player.pause();
-                        }
+                    if (player.isActuallyPlaying()) {
+                        player.pause();
                     }
                     final String key = player.getPlayerId();
-                    channel.invokeMethod("audio.onHeadsetPlug",  buildArguments(key, isPlug));
+                    channel.invokeMethod("audio.onAudioBecomeNoisy",  buildArguments(key, 0));
                 }
             }
         }
